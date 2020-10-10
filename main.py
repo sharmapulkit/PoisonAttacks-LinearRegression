@@ -1,15 +1,21 @@
 import numpy as np
 import pandas as pd
 
-from utils import *
+import load_datasets
 from attac import *
 from protec import *
+import models
 
 def main():
     ### Load Dataset
-    data = load_dataset.houseData().load()
+    data = load_datasets.houseData()
+    data.load()
+    print(data.X.shape)
 
     ### Train Model
+    baselinemodel = models.ols(data.X.shape[1])
+    baselinemodel.fit(data)
+
     ### Create Attack
     ### Train with TRIM
     ### Evaluate

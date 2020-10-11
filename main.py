@@ -17,6 +17,9 @@ def main():
     baselinemodel.fit(data)
 
     ### Create Attack
+    bgd = BGD(data, 30)
+    data = bgd.generatePoisonPoints(0.1)
+
     ### Train with TRIM
     ### Evaluate
 

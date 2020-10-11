@@ -26,6 +26,9 @@ class houseData(datasets):
     def get_df(self):
         return self.df
 
+    def getSize(self):
+        return len(self.df)
+
 class initialDataSet(datasets):
     def __init__(self):
         pass
@@ -34,21 +37,21 @@ class initialDataSet(datasets):
         """
         Load an Inverse Flip data set randomly from training data
         """
-        trainDataSize = len(data_tr)
+        trainDataSize = data_tr.getSize()
         assert N < trainDataSize
 
         arr = range(0, trainDataSize)
         selectedIdxs = np.random.choice(arr, size=N, replace=False)
 
-        self.X = data_tr.X[selectedIdxs]
-        self.Y = 1 - data_tr.Y[selectedIdxs]
+        self.X = data_tr.X.iloc[selectedIdxs]
+        self.Y = 1 - data_tr.Y.iloc[selectedIdxs]
 
 
     def loadBFlip(self, data_tr, N):
         """
         Load a Boundary Flip data set randomly from training data
         """
-        trainDataSize = len(data_tr)
+        trainDataSize = data_tr.getSize()
         assert N < trainDataSize
 
         arr = range(0, trainDataSize)
@@ -64,6 +67,9 @@ class initialDataSet(datasets):
         """
         self.X, self.Y = np.ranomd.multivariate_normal(mean, variance, N)
 
+
+    def getSize(self):
+        return len(self.X)
 
     def get_df(self):
         """

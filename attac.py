@@ -43,12 +43,20 @@ class BGD(attack):
     def set_model(self, m):
         self.model = m
 
-    def generatePoisonPoints(self):
+    def generatePoisonPoints(self, alpha):
+        """ Return a set of poison points """
         epsilon = 0.01
         trainData = load_datasets.houseData()
         trainData.load()
 
-        Num_poisonPts = int(self.alpha*len(trainData))
+        Num_poisonPts = int(alpha*trainData.getSize())
         ini_poisonPts = load_datasets.initialDataSet()
         ini_poisonPts.loadInvFlip(trainData, Num_poisonPts)
-        _generatePoisonPoints(trainData, ini_poisonPts, epsilon)
+        print(ini_poisonPts.X.shape)
+
+        #poisonPoints = self._generatePoisonPoints(trainData, ini_poisonPts, epsilon)
+
+        #return poisonPoints
+
+
+

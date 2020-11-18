@@ -34,13 +34,13 @@ def test_house_lasso():
 
 def main():
     ### Load Dataset
-    # data = load_datasets.houseData()
-    data = load_datasets.loanData()
+    data = load_datasets.houseData()
+    # data = load_datasets.loanData()
     data.load()
 
     ### Train Model
-    baselinemodel = models.Lasso(data.whole.X.shape[1])
-    baselinemodel.fit(data.whole.X, data.whole.Y)
+    baselinemodel = models.Ridge(data.whole.X.shape[1])
+    baselinemodel.fit(data.whole.X, data.whole.Y, max_iter=400)
     mse_before_poisoning = baselinemodel.mse(data.train.X, data.train.Y)
 
     ### Create Attack
@@ -49,8 +49,8 @@ def main():
     ini_poisonPts = load_datasets.initialDataSet()
     ini_poisonPts.loadInvFlip(data, Num_poisonPts)
 
-    advModel = models.Lasso(data.whole.X.shape[1], weight_decay=0.001)
-    bgd = BGD(data, ini_poisonPts, max_iters=30, eta=0.5, line_search_epsilon=0.001, advModel=advModel)
+    advModel = models.Ridge(data.whole.X.shape[1], weight_decay=0.001)
+    bgd = BGD(data, ini_poisonPts, max_iters=50, eta=0.01, line_search_epsilon=1e-8, advModel=advModel)
     data_poison = bgd.generatePoisonPoints(baselinemodel)
 
     pk.dump(data_poison, open("poisoned_data", 'wb'))

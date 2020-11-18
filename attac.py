@@ -81,7 +81,7 @@ class BGD(attack):
         iters = 0
         xc_new = xc
         eta = self.eta
-        beta = 0.8
+        beta = 0.05
         while (True):
             ## Compute Gradient
             objective_curr = model.objective(self.data_val.X, self.data_val.Y)
@@ -100,7 +100,7 @@ class BGD(attack):
                 xc_new = xc_new - grad_wxc[:, 0] * eta
                 break
 
-            if (objective_curr < objective_prev):
+            if (iters > 0):#(objective_curr < objective_prev):
                 eta = eta*beta
 
             objective_prev = objective_curr

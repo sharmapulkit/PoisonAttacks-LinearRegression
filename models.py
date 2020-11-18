@@ -163,14 +163,14 @@ class Model(ABC):
         self._w = params[:-1]
         self._b = params[-1]
 
-    def fit(self, X, Y, max_iter=70):
+    def fit(self, X, Y, max_iter=400):
         if isinstance(X, pd.DataFrame):
             X = X.values
         if isinstance(Y, pd.DataFrame):
             Y = Y.values
 
         theta0 = np.append(self.w, self.b)
-        opts = {'maxiter':max_iter, 'disp':True}
+        opts = {'maxiter':max_iter, 'disp':True, 'gtol':1e-4}
         res = scipy.optimize.minimize(fun=self.objective_at, x0=theta0, jac=self.gradient_at, args=(X, Y), method='BFGS', options=opts)
         theta_star = res.x
         self.w = theta_star[:-1]

@@ -153,7 +153,7 @@ class BGD(attack):
 
     def generatePoisonPoints(self, baselinemodel):
         """ Return a set of poison points """
-        epsilon = 0.01
+        epsilon = 0.001
         # trainData = load_datasets.houseData()
         # trainData.load()
 
@@ -161,4 +161,32 @@ class BGD(attack):
         mse = baselinemodel.objective(pd.concat([self.data_tr.X, self.data_poison.X]), pd.concat([self.data_tr.Y, self.data_poison.Y]))
         print("final MSE:", mse)
 
+        return self.data_poison
+
+
+class StatP(attack):
+    """
+        Perform StatP attack
+    """
+    def __init__(self, mean, cov, n_poison=100):
+        super().__init__()
+        self.mean  = mean
+        self.cov = cov
+        self.n_poison = n_poison
+        self.data_poison = load_datasets.dataset_struct(None, None)
+
+    def _generatePoisonPoints(self, model, n_poison=None):
+        if not n_poison:
+            n_poison = self.n_poison
+
+        poison_points = np.around(np.random.multivariate_normal(self.mean, self.cov, n_poison))
+        y_pred = model.predict(poison_points)
+        poison_y = 1 - np.around(y_pred)
+        self.data_poison.X = poison_points
+        self.data_poison.Y = poison_y
+        
+    def generatePoisonPoints(self, baselinemodel, n_poison):
+        """ Return a set of poison points """
+
+        self._generatePoisonPoints(baselinemodel, n_poison)
         return self.data_poison

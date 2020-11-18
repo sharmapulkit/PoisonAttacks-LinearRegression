@@ -60,7 +60,7 @@ class Model(ABC):
         """
         pass
 
-    def objective(self, X, Y):
+    def objective(self, X, Y, xc=None, yc=None):
         """
         returns the objective function for the model
         """
@@ -163,7 +163,7 @@ class Model(ABC):
         self._w = params[:-1]
         self._b = params[-1]
 
-    def fit(self, X, Y, max_iter=70):
+    def fit(self, X, Y, max_iter=400):
         if isinstance(X, pd.DataFrame):
             X = X.values
         if isinstance(Y, pd.DataFrame):

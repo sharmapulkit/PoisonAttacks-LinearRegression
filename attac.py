@@ -81,6 +81,7 @@ class BGD(attack):
         iters = 0
         xc_new = xc
         eta = self.eta
+        beta = 0.8
         while (True):
             ## Compute Gradient
             objective_curr = model.objective(self.data_val.X, self.data_val.Y)
@@ -91,13 +92,16 @@ class BGD(attack):
             xc_new = xc_new + grad_wxc[:, 0] * eta
             yc_new = yc # yc_new + grad_wyc[:, 0] * eta
             ## break if no progress or convergence
-            print(objective_curr)
+            print("Line search objective:", objective_curr)
             if (np.abs(objective_curr - objective_prev) < self.line_search_epsilon or (iters > 100)):
                 break
 
-            if (objective_curr < objective_prev):
-                xc_new = xc_new - grad * eta
+            if (objective_curr >= objective_prev):
+                xc_new = xc_new - grad_wxc[:, 0] * eta
                 break
+
+            if (objective_curr < objective_prev):
+                eta = eta*beta
 
             objective_prev = objective_curr
             iters += 1
@@ -140,6 +144,7 @@ class BGD(attack):
                 wCurr = self.advModel.objective(self.data_val.X, self.data_val.Y)
             i += 1
 
+
     def set_advmodel(self, m):
         self.advmodel = m
 
@@ -152,9 +157,8 @@ class BGD(attack):
         # trainData = load_datasets.houseData()
         # trainData.load()
 
-        poisonPoints = self._generatePoisonPoints(baselinemodel, epsilon)
+        self._generatePoisonPoints(baselinemodel, epsilon)
+        mse = baselinemodel.objective(pd.concat([self.data_tr.X, self.data_poison.X]), pd.concat([self.data_tr.Y, self.data_poison.Y]))
+        print("final MSE:", mse)
 
         return self.data_poison
-
-
-

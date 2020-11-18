@@ -12,33 +12,133 @@ class Model(ABC):
         self._w = np.ones(d)
         self._b = 1
 
+    def mse(self, X, Y):
+        """
+        return MSE for given data points
+        X: (N, d) ndarray
+        y: (N,) ndarray
+        """
+        if isinstance(X, pd.DataFrame):
+            X = X.values
+        if isinstance(Y, pd.DataFrame):
+            Y = Y.values
+
+        wx = X @ self.w
+        wxb = wx + self.b
+        if not wxb.shape == Y.shape:
+            wxb = wxb[:, None]
+        loss = np.mean(np.square(wxb - Y))
+        return loss
+
+    def mse_at(self, wb, X, Y):
+        """
+        return MSE for given data points
+        X: (N, d) ndarray
+        y: (N,) ndarray
+        """
+        if isinstance(X, pd.DataFrame):
+            X = X.values
+        if isinstance(Y, pd.DataFrame):
+            Y = Y.values
+
+        wx = X @ wb[:-1]
+        wxb = wx + wb[-1]
+        loss = np.mean(np.square(wxb[:, None] - Y))
+        return loss
+
     @abstractmethod
+    def regularization(self, wb, X, Y):
+        """
+        Returns the regularization component of loss
+        """
+        pass
+
+    @abstractmethod
+    def regularization_at(self, wb, X, Y):
+        """
+        Returns the regularization component of loss
+        """
+        pass
+
     def objective(self, X, Y):
         """
         returns the objective function for the model
         """
-        pass
+        mse = self.mse(X, Y)
+        regularization = self.regularization(X, Y)
 
-    @abstractmethod
+        loss = mse + regularization
+        return loss
+
     def objective_at(self, wb, X, Y):
         """
         returns the objective function for the model at given parameters
         """
-        pass
+        mse = self.mse_at(wb, X, Y)
+        regularization = self.regularization_at(wb, X, Y)
 
-    @abstractmethod
-    def gradient(self, X, Y):
+        loss = mse + regularization
+        return loss
+
+    def mse_gradient(self, X, Y):
         """
         returns the gradient of model parameters
         """
-        pass
+        if isinstance(X, pd.DataFrame):
+            X = X.values
+        if isinstance(Y, pd.DataFrame):
+            Y = Y.values
 
-    @abstractmethod
-    def gradient_at(self, wb, X, Y):
+        wx = X @ self.w
+        wxb = wx + self.b
+        diff = wxb - Y
+        grad_w = 2*np.mean(diff * X, axis=1)
+        grad_b = 2*np.mean(diff)
+        return np.concatenate((grad_w, grad_b), axis=None)
+
+
+    def mse_gradient_at(self, wb, X, Y):
         """
         returns the gradient of model parameters at given parameters
         """
+        if isinstance(X, pd.DataFrame):
+            X = X.values
+        if isinstance(Y, pd.DataFrame):
+            Y = Y.values
+
+        wx = X @ wb[:-1]
+        wxb = wx + wb[-1]
+        diff = wxb[:, None] - Y
+        grad_w = 2*np.mean(diff * X, axis=0)
+        grad_b = 2*np.mean(diff)
+        return np.concatenate((grad_w, grad_b), axis=None)
+
+    @abstractmethod
+    def reg_gradient(self, X, Y):
+        """
+        returns the gradient of regularization loss at given parameters
+        """
         pass
+
+    def gradient(self, X, Y):
+        """
+        returns the gradient of the model objective 
+        """
+        mse_grad = self.mse_gradient(X, Y)
+        reg_grad = self.reg_gradient(X, Y)
+        total_grad = mse_grad + reg_grad
+
+        return total_grad
+
+    def gradient_at(self, wb, X, Y):
+        """
+        returns the gradient of model objective at the given model parameters
+        """
+        mse_grad = self.mse_gradient_at(wb, X, Y)
+        reg_grad = self.reg_gradient_at(wb, X, Y)
+        total_grad = mse_grad + reg_grad
+
+        return total_grad
 
     @property
     def w(self):
@@ -63,72 +163,7 @@ class Model(ABC):
         self._w = params[:-1]
         self._b = params[-1]
 
-class OLS(Model):
-    """
-    Ordinary Least squares regression
-    """
-    def __init__(self, d):
-        super().__init__(d)
-
-    def objective(self, X, Y):
-        """
-        return MSE for given data points
-        X: (N, d) ndarray
-        y: (N,) ndarray
-        """
-        if isinstance(X, pd.DataFrame):
-            X = X.values
-        if isinstance(Y, pd.DataFrame):
-            Y = Y.values
-
-        wx = X @ self.w
-        wxb = wx + self.b
-        loss = np.mean(np.square(wxb - Y))
-        return loss
-
-    def objective_at(self, wb, X, Y):
-        """
-        return MSE for given data points
-        X: (N, d) ndarray
-        y: (N,) ndarray
-        """
-        if isinstance(X, pd.DataFrame):
-            X = X.values
-        if isinstance(Y, pd.DataFrame):
-            Y = Y.values
-
-        wx = X @ wb[:-1]
-        wxb = wx + wb[-1]
-        loss = np.mean(np.square(wxb - Y))
-        return loss
-
-    def gradient(self, X, Y):
-        if isinstance(X, pd.DataFrame):
-            X = X.values
-        if isinstance(Y, pd.DataFrame):
-            Y = Y.values
-
-        wx = X @ self.w
-        wxb = wx + self.b
-        diff = wxb - Y
-        grad_w = 2*np.mean(diff * X, axis=1)
-        grad_b = 2*np.mean(diff)
-        return np.concatenate((grad_w, grad_b), axis=None)
-
-    def gradient_at(self, wb, X, Y):
-        if isinstance(X, pd.DataFrame):
-            X = X.values
-        if isinstance(Y, pd.DataFrame):
-            Y = Y.values
-
-        wx = X @ wb[:-1]
-        wxb = wx + wb[-1]
-        diff = wxb[:, None] - Y
-        grad_w = 2*np.mean(diff * X, axis=0)
-        grad_b = 2*np.mean(diff)
-        return np.concatenate((grad_w, grad_b), axis=None)
-
-    def fit(self, X, Y, max_iter=30):
+    def fit(self, X, Y, max_iter=70):
         if isinstance(X, pd.DataFrame):
             X = X.values
         if isinstance(Y, pd.DataFrame):
@@ -146,9 +181,6 @@ class OLS(Model):
         wxb = wx + self.b
         return wxb
 
-    def getG(self):
-        return 0
-
     def score(self, X, Y):
         if isinstance(X, pd.DataFrame):
             X = X.values
@@ -159,6 +191,28 @@ class OLS(Model):
         mse = np.sum(np.square(Y - predictions[:, None]))
         return mse
 
+class OLS(Model):
+    """
+    Ordinary Least squares regression
+    """
+    def __init__(self, d):
+        super().__init__(d)
+
+    def regularization(self, X, Y):
+        return 0
+
+    def regularization_at(self, wb, X, Y):
+        return 0
+
+    def reg_gradient(self, X, Y):
+        return 0
+
+    def reg_gradient_at(self, wb, X, Y):
+        return 0
+
+    def getG(self):
+        return 0
+
 
 class Ridge(Model):
     """
@@ -168,47 +222,26 @@ class Ridge(Model):
         super().__init__(d)
         self.weight_decay = weight_decay
 
-    def objective(self, X, Y):
-        wx = X @ self.w
-        wxb = wx + self.b
-        loss = np.mean(np.square(wxb - Y))
-        loss += self.weight_decay*np.sum(np.square(self.w))
-        return loss
 
-    def gradient(self, X, Y):
-        wx = X @ self.w
-        wxb = wx + self.b
-        diff = wxb - Y
-        grad_w = 2*np.sum(diff * X, axis=1)
-        grad_w += 2*self.weight_decay*self.w
-        grad_b = 2*np.sum(diff)
-        return np.concatenate((grad_w, grad_b), axis=None)
+    def regularization(self, X, Y):
+        reg_loss = self.weight_decay*np.sum(np.square(self.w))
+        return reg_loss
 
-    def objective_at(self, wb, X, Y):
-        wx = X @ wb[:-1]
-        wxb = wx + wb[-1]
-        loss = np.mean(np.square(wxb - Y))
-        loss += self.weight_decay*np.sum(np.square(wb[:-1]))
-        return loss
+    def regularization_at(self, wb, X, Y):
+        reg_loss = self.weight_decay*np.sum(np.square(wb[:-1]))
+        return reg_loss
 
-    def gradient_at(self, wb, X, Y):
-        wx = X @ wb[:-1]
-        wxb = wx + wb[-1]
-        diff = wxb - Y
-        grad_w = 2*np.sum(diff * X, axis=1)
-        grad_w += 2*self.weight_decay*wb[:-1]
-        grad_b = 2*np.sum(diff)
-        return np.concatenate((grad_w, grad_b), axis=None)
+    def reg_gradient(self, X, Y):
+        grad_w = 2*self.weight_decay*self.w
+        grad_b = [0]
+        reg_grad = np.concatenate((grad_w, grad_b), axis=None)
+        return reg_grad
 
-    def fit(self, data):
-        X = data.X
-        y = data.Y
-
-        theta0 = np.append(self.w, self.b)
-        opts = {'maxiter':30, 'disp':True}
-        theta_star, _, _ = scipy.optimize.minimize(func=self.objective_at, x0=theta0, fprime=self.gradient_at, args=(X, y), method='L-BFGS-B', options=opts)
-        self.w(theta_star[:-1])
-        self.b(theta_star[-1])
+    def reg_gradient_at(self, wb, X, Y):
+        grad_w = 2*self.weight_decay*wb[:-1]
+        grad_b = [0]
+        reg_grad = np.concatenate((grad_w, grad_b), axis=None)
+        return reg_grad
 
     def getG(self):
         return np.eye(len(self.w))
@@ -221,47 +254,25 @@ class Lasso(Model):
         super().__init__(d)
         self.weight_decay = weight_decay
 
-    def objective(self, X, Y):
-        wx = X @ self.w
-        wxb = wx + self.b
-        loss = np.mean(np.square(wxb - Y))
-        loss += self.weight_decay*np.sum(np.abs(self.w))
-        return loss
+    def regularization(self, X, Y):
+        reg_loss = self.weight_decay*np.sum(np.abs(self.w))
+        return reg_loss
 
-    def gradient(self, X, Y):
-        wx = X @ self.w
-        wxb = wx + self.b
-        diff = wxb - Y
-        grad_w = 2*np.sum(diff * X, axis=1)
-        grad_w += self.weight_decay*np.where(self.w[:-1]>0, 1, -1)
-        grad_b = 2*np.sum(diff)
-        return np.concatenate((grad_w, grad_b), axis=None)
+    def regularization_at(self, wb, X, Y):
+        reg_loss = self.weight_decay*np.sum(np.abs(wb[:-1]))
+        return reg_loss
 
-    def objective_at(self, wb, X, Y):
-        wx = X @ wb[:-1]
-        wxb = wx + wb[-1]
-        loss = np.mean(np.square(wxb - Y))
-        loss += self.weight_decay*np.sum(np.abs(wb[:-1]))
-        return loss
+    def reg_gradient(self, X, Y):
+        grad_w = self.weight_decay*np.where(self.w[:-1]>0, 1, -1)
+        grad_b = [0]
+        reg_grad = np.concatenate((grad_w, grad_b), axis=None)
+        return reg_grad
 
-    def gradient_at(self, wb, X, Y):
-        wx = X @ wb[:-1]
-        wxb = wx + wb[-1]
-        diff = wxb - Y
-        grad_w = 2*np.sum(diff * X, axis=1)
-        grad_w += self.weight_decay*np.where(self.w[:-1]>0, 1, -1)
-        grad_b = 2*np.sum(diff)
-        return np.concatenate((grad_w, grad_b), axis=None)
-
-    def fit(self, data):
-        X = data.X.values
-        y = data.Y.values
-
-        theta0 = np.append(self.w, self.b)
-        opts = {'maxiter':30, 'disp':True}
-        theta_star, _, _ = scipy.optimize.minimize(func=self.objective_at, x0=theta0, fprime=self.gradient_at, args=(X, y), method='L-BFGS-B', options=opts)
-        self.w(theta_star[:-1])
-        self.b(theta_star[-1])
+    def reg_gradient_at(self, wb, X, Y):
+        grad_w = self.weight_decay*np.where(wb[:-1]>0, 1, -1)
+        grad_b = [0]
+        reg_grad = np.concatenate((grad_w, grad_b), axis=None)
+        return reg_grad
 
     def getG(self):
         return 0
@@ -275,47 +286,25 @@ class ElasticNet(Model):
         self.beta_1 = weight_decay_l1
         self.beta_2 = weight_decay_l2
 
-    def objective(self, X, Y):
-        wx = X @ self.w
-        wxb = wx + self.b
-        loss = np.mean(np.square(wxb - Y))
-        loss += self.beta_1*np.sum(np.abs(self.w)) + self.beta_2*np.sum(np.square(self.w))
-        return loss
+    def regularization(self, X, Y):
+        reg_loss = self.beta_1*np.sum(np.abs(self.w)) + self.beta_2*np.sum(np.square(self.w))
+        return reg_loss
 
-    def gradient(self, X, Y):
-        wx = X @ self.w
-        wxb = wx + self.b
-        diff = wxb - Y
-        grad_w = 2*np.sum(diff * X, axis=1)
-        grad_w += self.beta_1*np.where(self.w[:-1]>0, 1, -1) + 2*self.weight_decay*self.w
-        grad_b = 2*np.sum(diff)
-        return np.concatenate((grad_w, grad_b), axis=None)
+    def regularization_at(self, wb, X, Y):
+        reg_loss = self.weight_decay*np.sum(np.abs(wb[:-1])) + self.beta_2*np.sum(np.square(wb[:-1]))
+        return reg_loss
 
-    def objective_at(self, wb, X, Y):
-        wx = X @ wb[:-1]
-        wxb = wx + wb[-1]
-        loss = np.mean(np.square(wxb - Y))
-        loss += self.weight_decay*np.sum(np.abs(wb[:-1])) + self.beta_2*np.sum(np.square(wb[:-1]))
-        return loss
+    def reg_gradient(self, X, Y):
+        grad_w = self.beta_1*np.where(self.w[:-1]>0, 1, -1) + 2*self.weight_decay*self.w
+        grad_b = [0]
+        reg_grad = np.concatenate((grad_w, grad_b), axis=None)
+        return reg_grad
 
-    def gradient_at(self, wb, X, Y):
-        wx = X @ wb[:-1]
-        wxb = wx + wb[-1]
-        diff = wxb - Y
-        grad_w = 2*np.sum(diff * X, axis=1)
-        grad_w += self.weight_decay*np.where(self.w[:-1]>0, 1, -1) + 2*self.weight_decay*wb[:-1]
-        grad_b = 2*np.sum(diff)
-        return np.concatenate((grad_w, grad_b), axis=None)
-
-    def fit(self, data):
-        X = data.X
-        y = data.Y
-
-        theta0 = np.append(self.w, self.b)
-        opts = {'maxiter':30, 'disp':True}
-        theta_star, _, _ = scipy.optimize.minimize(func=self.objective_at, x0=theta0, fprime=self.gradient_at, args=(X, y), method='L-BFGS-B', options=opts)
-        self.w(theta_star[:-1])
-        self.b(theta_star[-1])
+    def reg_gradient_at(self, wb, X, Y):
+        grad_w = self.weight_decay*np.where(wb[:-1]>0, 1, -1) + 2*self.weight_decay*wb[:-1]
+        grad_b = [0]
+        reg_grad = np.concatenate((grad_w, grad_b), axis=None)
+        return reg_grad
 
     def getG(self):
         self.rho = 0.5

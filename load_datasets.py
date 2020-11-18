@@ -20,28 +20,18 @@ class dataset_struct:
         return len(self._X)
 
 class datasets():
-    def __init__(self):
-        pass
-
-    def load(self):
-        pass
-
-class houseData(datasets):
-    def __init__(self, train_frac=0.7):
-        self.dataPath = "./datasets/house-processed.csv"
+    def __init__(self, train_frac):
         self.train_frac = train_frac
-
         self.train = None
         self.val = None
         self.whole = None
 
     def load(self):
         self.df = pd.read_csv(self.dataPath)
-        target_columns = ['SalePrice']
-        feature_columns = self.df.columns.drop(target_columns)
+        feature_columns = self.df.columns.drop(self.target_columns)
 
         X = self.df[feature_columns]
-        Y = self.df[target_columns]
+        Y = self.df[self.target_columns]
         self.whole = dataset_struct(X, Y)
 
         N = len(X)
@@ -69,6 +59,24 @@ class houseData(datasets):
         if (self.val is None):
             raise ValueError("Val data not loaded")
         return self.val
+
+class houseData(datasets):
+    def __init__(self, train_frac=0.7):
+        super().__init__(train_frac)
+        self.dataPath = "./datasets/house-processed.csv"
+        self.target_columns = ['SalePrice']
+
+class loanData(datasets):
+    def __init__(self, train_frac=0.7):
+        super().__init__(train_frac)
+        self.dataPath = "./datasets/loan-processed.csv"
+        self.target_columns = ['int_rate']
+
+class pharmpreprocData(datasets):
+    def __init__(self, train_frac=0.7):
+        super().__init__(train_frac)
+        self.dataPath = "./datasets/pharm-preproc.csv"
+        self.target_columns = ['TherapeuticDoseofWarfarin']
 
 
 class initialDataSet(datasets):

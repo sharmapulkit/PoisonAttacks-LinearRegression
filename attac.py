@@ -3,6 +3,8 @@ import load_datasets
 import numpy as np
 import pandas as pd
 
+from scipy.optimize import line_search
+
 class attack():
     def __init__(self):
         pass
@@ -43,7 +45,7 @@ class BGD(attack):
         mu = np.mean(data.X, axis=0)
         return mu
 
-    def computeGrad_x(self, xc, yc):
+    def computeGrad_x(self, X, Y, xc, yc):
         """
         Return the gradient w.r.t. x of the adversary model
         """
@@ -65,7 +67,7 @@ class BGD(attack):
         w_grad = np.append(w_grad, np.sum(res*self.data_val.Y.values.T, axis=1))
 
         grad = theta_grad @ w_grad
-        return grad.T
+        return np.zeros_like(X), np.zeros_like(Y), grad.T[:-1], 0
 
     def line_search(self, model, params, xc, yc):
         """
@@ -82,29 +84,44 @@ class BGD(attack):
         xc_new = xc
         eta = self.eta
         beta = 0.05
-        while (True):
-            ## Compute Gradient
-            objective_curr = model.objective(self.data_val.X, self.data_val.Y)
-            grad = self.computeGrad_x(xc, yc)
-            grad_wxc = np.array(grad[:-1])
-            grad_bxc = np.array(grad[-1])
-            ## update xc
-            xc_new = xc_new + grad_wxc[:, 0] * eta
-            yc_new = yc # yc_new + grad_wyc[:, 0] * eta
-            ## break if no progress or convergence
-            print("Line search objective:", objective_curr)
-            if (np.abs(objective_curr - objective_prev) < self.line_search_epsilon or (iters > 100)):
-                break
 
-            if (objective_curr >= objective_prev):
-                xc_new = xc_new - grad_wxc[:, 0] * eta
-                break
+        xk = (self.data_val.X, self.data_val.Y, xc, yc)
+        grad_ini = self.computeGrad_x(*xk)
+        print(xk[0].shape, grad_ini[0].shape)
+        print(xk[1].shape, grad_ini[1].shape)
+        print(xk[2].shape, grad_ini[2].shape)
+        hhh = xk[0] - grad_ini[0], xk[1] - grad_ini[1], xk[2] - grad_ini[2]
+        print("kkk:", hhh[0].shape)
+        alpha, _, _, _, _ = line_search(model.objective, self.computeGrad_x, *xk, grad_ini)
 
-            if (iters > 0):#(objective_curr < objective_prev):
-                eta = eta*beta
+        xc_new = xc + alpha*grad_ini
+        yc_new = yc
 
-            objective_prev = objective_curr
-            iters += 1
+        # while (True):
+        #     ## Compute Gradient
+        #     objective_curr = model.objective(self.data_val.X, self.data_val.Y)
+        #     grad = self.computeGrad_x(xc, yc)
+        #     grad_wxc = np.array(grad[:-1])
+        #     grad_bxc = np.array(grad[-1])
+        #     ## update xc
+        #     xc_new = xc_new + grad_wxc[:, 0] * eta
+        #     yc_new = yc # + grad_wyc[:, 0] * eta
+        #     ## break if no progress or convergence
+        #     print("Line search objective:", objective_curr)
+        #     if (np.abs(objective_curr - objective_prev) < self.line_search_epsilon or (iters > 100)):
+        #         break
+
+        #     if (objective_curr < objective_prev):
+        #         xc_new = xc_new - grad_wxc[:, 0] * eta
+        #         # yc_new = yc_new - grad_wyc[:, 0] * eta
+        #         break
+
+        #     if (iters > 0):#(objective_curr < objective_prev):
+        #         eta = eta*beta
+
+        #     print("Number of iters:", iters)
+        #     objective_prev = objective_curr
+        #     iters += 1
 
         return xc_new, yc_new
 
@@ -143,6 +160,8 @@ class BGD(attack):
                 wPrev = wCurr
                 wCurr = self.advModel.objective(self.data_val.X, self.data_val.Y)
             i += 1
+            if (wCurr < wPrev):
+                self.eta *= 0.75
 
 
     def set_advmodel(self, m):
@@ -153,7 +172,7 @@ class BGD(attack):
 
     def generatePoisonPoints(self, baselinemodel):
         """ Return a set of poison points """
-        epsilon = 0.001
+        epsilon = 1e-3 ## From the paper
         # trainData = load_datasets.houseData()
         # trainData.load()
 
@@ -184,7 +203,7 @@ class StatP(attack):
         poison_y = 1 - np.around(y_pred)
         self.data_poison.X = poison_points
         self.data_poison.Y = poison_y
-        
+
     def generatePoisonPoints(self, baselinemodel, n_poison):
         """ Return a set of poison points """
 

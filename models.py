@@ -60,7 +60,7 @@ class Model(ABC):
         """
         pass
 
-    def objective(self, X, Y):
+    def objective(self, X, Y, xc=None, yc=None):
         """
         returns the objective function for the model
         """

@@ -13,7 +13,7 @@ class BGD(attack):
     """
     Perform a BGD attack on a given model
     """
-    def __init__(self, data, data_poison, max_iters, eta, line_search_epsilon, advModel):
+    def __init__(self, data, data_poison, max_iters, eta, line_search_epsilon, advModel, rvo=False):
         super().__init__()
         self.data_tr = data.getTrain() ## object of type dataset_struct
         self.data_val = data.getVal() ## object of type dataset_struct
@@ -23,6 +23,8 @@ class BGD(attack):
         self.line_search_epsilon = line_search_epsilon
         self.advModel = advModel
         self.lambdaG = 0.2
+
+        self.rvo = rvo
 
     def computeM(self, xc, yc):
         """
@@ -45,7 +47,7 @@ class BGD(attack):
         mu = np.mean(data.X, axis=0)
         return mu
 
-    def computeGrad_x(self, xc, yc, rvo=False):
+    def computeGrad_x(self, xc, yc):
         """
         Return the gradient w.r.t. x of the adversary model
         """
@@ -53,7 +55,7 @@ class BGD(attack):
         mu = self.mean(self.data_tr)
         M = self.computeM(xc, yc)
 
-        if (rvo is True):
+        if (self.rvo is True):
             eq7lhs = np.bmat([[sigma + self.lambdaG*self.advModel.getG(), mu[:, None]], [mu[:, None].T, np.array([[1]])]] )
             eq7rhs = -(1/len(self.data_val.X))*np.bmat([[M, self.advModel.w[:, None]], [-xc[:, None].T, -np.array([[1]]) ] ]).T
         else:
@@ -63,16 +65,29 @@ class BGD(attack):
         # print("lhs:", eq7lhs.shape)
         # print("rhs:", eq7rhs.shape)
         theta_grad, _, _, _ = np.linalg.lstsq(eq7lhs, eq7rhs, rcond=None)
-        # print(theta_grad.shape)
+        # print("SHAPE theta_grad:", theta_grad.shape)
 
         ### Compute w_grad
         res = -1*(self.data_val.Y.iloc[:, 0] - self.advModel.predict(self.data_val.X)).values
-        w_grad = np.sum(res * self.data_val.X.values.T, axis=1)
-        w_grad = np.append(w_grad, np.sum(res*self.data_val.Y.values.T, axis=1))
+        obj_grad = np.sum(res * self.data_val.X.values.T, axis=1)
+        obj_grad = np.append(obj_grad, np.sum(res, axis=0))[:, None]
+        # print(obj_grad.shape)
 
-        grad = theta_grad @ w_grad
-        grad = np.squeeze(np.asarray(grad))
-        return grad.T
+        # if (rvo is True):
+        #     w_grad_xc, b_grad_xc = theta_grad[:-1, :-1], theta_grad[:-1, -1]
+        #     w_grad_yc, b_grad_yc = theta_grad[-1, :-1], theta_grad[-1, -1]
+        # else:
+        #     w_grad_xc, b_grad_xc = theta_grad[:-1, :], theta_grad[-1, :]
+        #     w_grad_yc, b_grad_yc = np.zeros(()), 0
+
+        if (self.rvo is False):
+            wb_grad_yc = np.zeros((len(mu) + 1, 1))
+            theta_grad = np.append(theta_grad, wb_grad_yc, axis=1 )
+
+        # grad_xc = np.concatenate((obj_grad[:-1, None].T @ w_grad_xc, ))
+        # grad_yc = 
+        grad = theta_grad @ obj_grad
+        return grad
 
     def line_search(self, model, params, xc, yc):
         """
@@ -93,14 +108,17 @@ class BGD(attack):
         taintedTr = load_datasets.dataset_struct(np.append(np.copy(self.data_tr.X), xc_new[:, None].T, axis=0), np.append(np.copy(self.data_tr.Y), yc_new[:, None].T, axis=0) )
 
         grad = self.computeGrad_x(xc, yc)
-        grad_wxc = np.array(grad[:-1])
-        grad_bxc = np.array(grad[-1])
+        grad_xc = np.squeeze(np.array(grad[:-1]))
+        grad_yc = np.squeeze(np.array(grad[-1]))
+        print("grad_xc:", grad_xc.shape)
         while (True):
             ## Compute Gradient
             ## update xc
-            xc_new = xc_new + grad_wxc * eta
+            xc_new = xc_new + grad_xc * eta
             xc_new = np.clip(xc_new, 0, 1)
-            yc_new = yc # + grad_wyc[:, 0] * eta
+            yc_new = yc # + grad_yc * eta
+            if (self.rvo is True):
+                yc_new += grad_yc * eta
 
             taintedTr.X[-1] = xc_new
             taintedTr.Y[-1] = yc_new
@@ -185,4 +203,4 @@ class BGD(attack):
         mse = baselinemodel.objective(pd.concat([self.data_tr.X, self.data_poison.X]), pd.concat([self.data_tr.Y, self.data_poison.Y]))
         print("final MSE:", mse)
 
-        return self.data_poison
+        return self.data_poison, mse

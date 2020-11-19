@@ -45,7 +45,7 @@ class BGD(attack):
         mu = np.mean(data.X, axis=0)
         return mu
 
-    def computeGrad_x(self, xc, yc):
+    def computeGrad_x(self, xc, yc, rvo=False):
         """
         Return the gradient w.r.t. x of the adversary model
         """
@@ -53,8 +53,12 @@ class BGD(attack):
         mu = self.mean(self.data_tr)
         M = self.computeM(xc, yc)
 
-        eq7lhs = np.bmat([[sigma + self.lambdaG*self.advModel.getG(), mu[:, None]], [mu[:, None].T, np.array([[1]])]] )
-        eq7rhs = -(1/len(self.data_val.X))*np.bmat([[M, self.advModel.w[:, None]], [-xc[:, None].T, -np.array([[1]]) ] ]).T
+        if (rvo is True):
+            eq7lhs = np.bmat([[sigma + self.lambdaG*self.advModel.getG(), mu[:, None]], [mu[:, None].T, np.array([[1]])]] )
+            eq7rhs = -(1/len(self.data_val.X))*np.bmat([[M, self.advModel.w[:, None]], [-xc[:, None].T, -np.array([[1]]) ] ]).T
+        else:
+            eq7lhs = np.bmat([[sigma + self.lambdaG*self.advModel.getG(), mu[:, None]], [mu[:, None].T, np.array([[1]])]] )
+            eq7rhs = -(1/len(self.data_val.X))*np.bmat([[M, self.advModel.w[:, None]]]).T
 
         # print("lhs:", eq7lhs.shape)
         # print("rhs:", eq7rhs.shape)
@@ -62,7 +66,7 @@ class BGD(attack):
         # print(theta_grad.shape)
 
         ### Compute w_grad
-        res = (self.data_val.Y.iloc[:, 0] - self.advModel.predict(self.data_val.X)).values
+        res = -1*(self.data_val.Y.iloc[:, 0] - self.advModel.predict(self.data_val.X)).values
         w_grad = np.sum(res * self.data_val.X.values.T, axis=1)
         w_grad = np.append(w_grad, np.sum(res*self.data_val.Y.values.T, axis=1))
 
@@ -88,29 +92,30 @@ class BGD(attack):
         beta = 0.05
         taintedTr = load_datasets.dataset_struct(np.append(np.copy(self.data_tr.X), xc_new[:, None].T, axis=0), np.append(np.copy(self.data_tr.Y), yc_new[:, None].T, axis=0) )
 
+        grad = self.computeGrad_x(xc, yc)
+        grad_wxc = np.array(grad[:-1])
+        grad_bxc = np.array(grad[-1])
         while (True):
             ## Compute Gradient
-            grad = self.computeGrad_x(xc, yc)
-            grad_wxc = np.array(grad[:-1])
-            grad_bxc = np.array(grad[-1])
             ## update xc
             xc_new = xc_new + grad_wxc * eta
+            xc_new = np.clip(xc_new, 0, 1)
             yc_new = yc # + grad_wyc[:, 0] * eta
 
             taintedTr.X[-1] = xc_new
             taintedTr.Y[-1] = yc_new
             model.fit(taintedTr.X, taintedTr.Y)
 
-            # objective_curr = model.objective(self.data_val.X, self.data_val.Y)
-            objective_curr = model.objective(self.data_tr.X, self.data_tr.Y)
+            objective_curr = model.objective(self.data_val.X, self.data_val.Y)
+            # objective_curr = model.objective(self.data_tr.X, self.data_tr.Y)
             print("Line search objective:", objective_curr)
             ## break if no progress or convergence
-            if (np.abs(objective_curr - objective_prev) < self.line_search_epsilon or (iters > 100)):
+            if (np.abs(objective_curr - objective_prev) < self.line_search_epsilon or (iters > 50)):
                 print("objective_curr")
                 break
 
             if (objective_curr < objective_prev and iters > 0):
-                xc_new = xc_new - grad_wxc * eta
+                # xc_new = xc_new - grad_wxc * eta
                 print("diff", objective_curr, objective_prev, iters)
                 # yc_new = yc_new - grad_wyc[:, 0] * eta
                 break
@@ -153,11 +158,10 @@ class BGD(attack):
                 xc = self.data_poison.X.iloc[c]
                 yc = self.data_poison.Y.iloc[c]
                 x, y = self.line_search( self.advModel, theta, xc, yc ) # Line Search
-                # self.data_poison.X.iloc[c] = x
-                for col_id, col in enumerate(self.data_poison.X):
-                    self.data_poison.X.at[c, col] = x[col_id]
+                self.data_poison.X.iloc[c] = x
                 self.data_poison.Y.iloc[c] = y
                 model.fit(dataUnionX, dataUnionY)
+                self.advModel.setParams(model.getParams())
                 wPrev = wCurr
                 wCurr = self.advModel.objective(self.data_val.X, self.data_val.Y)
             i += 1

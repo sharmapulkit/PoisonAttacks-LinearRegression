@@ -44,7 +44,7 @@ def main():
     mse_before_poisoning = baselinemodel.mse(data.train.X, data.train.Y)
 
     ### Create Attack
-    poisoning_rate = 0.2
+    poisoning_rate = 0.20
     alpha = poisoning_rate / (1 - poisoning_rate) # poisoning rate
     Num_poisonPts = int(alpha * data.getSize())
     ini_poisonPts = load_datasets.initialDataSet()

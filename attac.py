@@ -119,6 +119,7 @@ class BGD(attack):
             yc_new = yc # + grad_yc * eta
             if (self.rvo is True):
                 yc_new += grad_yc * eta
+                curyc = min(1, max(0, curyc))
 
             taintedTr.X[-1] = xc_new
             taintedTr.Y[-1] = yc_new

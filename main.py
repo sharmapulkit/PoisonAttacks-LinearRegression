@@ -39,30 +39,31 @@ def main():
     data.load()
 
     ### Train Model
-    baselinemodel = models.Ridge(data.whole.X.shape[1])
+    baselinemodel = models.Lasso(data.whole.X.shape[1])
     baselinemodel.fit(data.whole.X, data.whole.Y, max_iter=400)
     mse_before_poisoning = baselinemodel.mse(data.train.X, data.train.Y)
 
     ### Create Attack
     # poisoning_rate = 0.08
     mses = {}
+    # for poisoning_rate in [0, 0.20]:
     for poisoning_rate in [0, 0.04, 0.08, 0.12, 0.16, 0.20]:
         alpha = poisoning_rate / (1 - poisoning_rate) # poisoning rate
         Num_poisonPts = int(alpha * data.getSize())
         ini_poisonPts = load_datasets.initialDataSet()
         ini_poisonPts.loadInvFlip(data, Num_poisonPts)
 
-        advModel = models.Ridge(data.whole.X.shape[1], weight_decay=0.001)
-        bgd = BGD(data, ini_poisonPts, max_iters=50, eta=0.01, line_search_epsilon=1e-8, advModel=advModel)
+        advModel = models.Lasso(data.whole.X.shape[1], weight_decay=0.001)
+        bgd = BGD(data, ini_poisonPts, max_iters=50, eta=0.01, line_search_epsilon=1e-8, advModel=advModel, rvo=False)
         data_poison, mse_after_poisoning = bgd.generatePoisonPoints(baselinemodel)
 
         mses[poisoning_rate] = mse_after_poisoning
-        pk.dump(baselinemodel.getParams(), open("baselineModel_params_{}.params".format(poisoning_rate), "wb"))
+        pk.dump(baselinemodel.getParams(), open("baselineModel_params_{}_rvo.params".format(poisoning_rate), "wb"))
         print("Posion points X shape:", data_poison.X.shape)
         print("Posion points Y shape:", data_poison.Y.shape)
 
     print(mses)
-    pk.dump(mses, open("poisoned_ridge_mses", 'wb'))
+    #pk.dump(mses, open("poisoned_ridge_mses_rvo", 'wb'))
     print("Train Objective before poisoning:", mse_before_poisoning)
 
     ### Train with TRIM

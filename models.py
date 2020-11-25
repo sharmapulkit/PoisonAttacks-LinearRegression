@@ -170,7 +170,7 @@ class Model(ABC):
             Y = Y.values
 
         theta0 = np.append(self.w, self.b)
-        opts = {'maxiter':max_iter, 'disp':True}
+        opts = {'maxiter':max_iter, 'disp':False}
         res = scipy.optimize.minimize(fun=self.objective_at, x0=theta0, jac=self.gradient_at, args=(X, Y), method='BFGS', options=opts)
         theta_star = res.x
         self.w = theta_star[:-1]

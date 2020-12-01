@@ -2,7 +2,9 @@ import models
 import load_datasets
 import numpy as np
 import pandas as pd
+import time
 
+from multiprocessing import Pool
 from scipy.optimize import line_search
 
 class attack():
@@ -23,8 +25,10 @@ class BGD(attack):
         self.line_search_epsilon = line_search_epsilon
         self.advModel = advModel
         self.lambdaG = 0.2
-
         self.rvo = rvo
+
+        self._mean = None
+        self._covariance = None
 
     def computeM(self, xc, yc):
         """
@@ -39,13 +43,15 @@ class BGD(attack):
 
     def covariance(self, data):
         """ Return covariance matrix """
-        cov = data.X.T @ data.X / len(data.X)
-        return cov
+        if self._covariance is None:
+            self._covariance = data.X.T @ data.X / len(data.X)
+        return self._covariance
 
     def mean(self, data):
         """ Return mean vector """
-        mu = np.mean(data.X, axis=0)
-        return mu
+        if self._mean is None:
+            self._mean = np.mean(data.X, axis=0)
+        return self._mean
 
     def computeGrad_x(self, xc, yc, valData=False):
         """
@@ -110,8 +116,10 @@ class BGD(attack):
         xc_new = xc
         yc_new = yc
         eta = self.eta
-        beta = 0.05
+        beta = 0.08
         taintedTr = load_datasets.dataset_struct(np.append(np.copy(self.data_tr.X), xc_new[:, None].T, axis=0), np.append(np.copy(self.data_tr.Y), yc_new[:, None].T, axis=0) )
+        model.fit(taintedTr.X, taintedTr.Y)
+        objective_prev = model.mse(taintedTr.X, taintedTr.Y)
 
         grad = self.computeGrad_x(xc, yc)
         grad_xc = np.squeeze(np.array(grad[:-1]))
@@ -129,13 +137,13 @@ class BGD(attack):
 
             taintedTr.X[-1] = xc_new
             taintedTr.Y[-1] = yc_new
-            model.fit(taintedTr.X, taintedTr.Y)
+            model.fit(taintedTr.X, taintedTr.Y, max_iter=50)
 
-            objective_curr = model.objective(taintedTr.X, taintedTr.Y)
+            objective_curr = model.mse(taintedTr.X, taintedTr.Y)
             # objective_curr = model.objective(self.data_tr.X, self.data_tr.Y)
             # print("Line search objective:", objective_curr)
             ## break if no progress or convergence
-            if (np.abs(objective_curr - objective_prev) < self.line_search_epsilon or (iters > 100)):
+            if (np.abs(objective_curr - objective_prev) < self.line_search_epsilon or (iters > 8)):
                 # print("objective_curr")
                 break
 
@@ -144,13 +152,17 @@ class BGD(attack):
                 if (self.rvo is True):
                     yc_new = yc_new - grad_yc * eta
                 # print("diff", objective_curr, objective_prev, iters)
+                # if (iters > 2):
                 break
-
-            if (iters > 0):#(objective_curr < objective_prev):
+                
+            if (iters > 0):
                 eta = eta*beta
+            
+            objective_prev = objective_curr
+            # if (iters > 0):#(objective_curr < objective_prev):
+            #     eta = eta*beta
 
             # print("Number of iters:", iters)
-            objective_prev = objective_curr
             iters += 1
 
         return xc_new, yc_new
@@ -172,8 +184,74 @@ class BGD(attack):
         print("SHAPES:", self.data_tr.Y.shape, self.data_poison.Y.shape)
         model.fit(dataUnionX, dataUnionY)
         self.advModel.setParams(model.getParams())
+        wPrev = self.advModel.mse(self.data_val.X, self.data_val.Y)
+        wCurr = 0
+
+        wBest = wPrev
+        while (i < self._max_iters):
+            print("Poisoning Iter:", i)
+            if (i != 0 and np.abs(wCurr - wPrev) < epsilon):
+                print("Current, Prev:", wCurr, wPrev)
+                break
+
+            wPrev = wCurr
+            wCurr = self.advModel.mse(self.data_val.X, self.data_val.Y)
+            theta = model.getParams()
+            for c in range(0, self.data_poison.getSize()):
+                xc = self.data_poison.X.iloc[c]
+                yc = self.data_poison.Y.iloc[c]
+                x, y = self.line_search( self.advModel, theta, xc, yc ) # Line Search
+                dataUnionX.iloc[self.data_tr.getSize() + c] = x
+                dataUnionY.iloc[self.data_tr.getSize() + c] = y
+                # time_after_assigning = time.time()
+                # print("Time to assign:", time_after_assigning - time_after_line_search)
+                model.fit(dataUnionX, dataUnionY)
+                # time_after_training_model = time.time()
+                # print("Time to train:", time_after_training_model - time_after_assigning)
+                self.advModel.setParams(model.getParams())
+                wCurr = self.advModel.mse(self.data_val.X, self.data_val.Y)
+
+            i += 1
+            if (wCurr < wPrev):
+                self.eta *= 0.75
+                for c in range(0, self.data_poison.getSize()):
+                    dataUnionX.iloc[self.data_tr.getSize() + c] = self.data_poison.X.iloc[c]
+                    dataUnionY.iloc[self.data_tr.getSize() + c] = self.data_poison.Y.iloc[c]
+            
+            if (wCurr > wBest):
+                wBest = wCurr
+                for c in range(0, self.data_poison.getSize()):
+                    self.data_poison.X.iloc[c] = dataUnionX.iloc[self.data_tr.getSize() + c]
+                    self.data_poison.Y.iloc[c] = dataUnionY.iloc[self.data_tr.getSize() + c]
+            
+            # print("Current loss:", model.mse(self.data_val.X, self.data_val.Y))
+            print("Current loss:", self.advModel.mse(self.data_val.X, self.data_val.Y))
+
+
+    def line_search_tuple(self, in_tuple):
+        return self.line_search(*in_tuple)
+
+    def _generatePoisonPoints_Pool1(self, model, epsilon):
+        """
+        Returns generated poisson points using Algorithm 1 in paper
+        model: Object of Model class - OLS, Ridge
+        advmodel: Object of Model class - OLS, Ridge
+        data_tr: Original Training dataset
+        data_val: Original Validation dataset
+        ini_poisonPts: Initial set of poison points
+        epsilon: positive constant for terminating condition
+        """
+        i = 0
+        dataUnionX = pd.concat([self.data_tr.X, self.data_poison.X])
+        dataUnionY = pd.concat([self.data_tr.Y, self.data_poison.Y])
+        print("SHAPES:", self.data_tr.X.shape, self.data_poison.X.shape)
+        print("SHAPES:", self.data_tr.Y.shape, self.data_poison.Y.shape)
+        model.fit(dataUnionX, dataUnionY)
+        self.advModel.setParams(model.getParams())
         wPrev = self.advModel.objective(self.data_val.X, self.data_val.Y)
         wCurr = 0
+
+        wBest = wPrev
         while (i < self._max_iters):
             print("Poisoning Iter:", i)
             if (i != 0 and np.abs(wCurr - wPrev) < epsilon):
@@ -183,26 +261,44 @@ class BGD(attack):
             wPrev = wCurr
             wCurr = self.advModel.objective(self.data_val.X, self.data_val.Y)
             theta = model.getParams()
-            for c in range(0, self.data_poison.getSize()):
-                xc = self.data_poison.X.iloc[c]
-                yc = self.data_poison.Y.iloc[c]
-                x, y = self.line_search( self.advModel, theta, xc, yc ) # Line Search
-                self.data_poison.X.iloc[c] = x
-                self.data_poison.Y.iloc[c] = y
-                # dataUnionX = pd.concat([self.data_tr.X, self.data_poison.X])
-                # dataUnionY = pd.concat([self.data_tr.Y, self.data_poison.Y])
-                dataUnionX.iloc[self.data_tr.getSize() + c] = x
-                dataUnionY.iloc[self.data_tr.getSize() + c] = y
+
+            #### Pool
+            workerpool = Pool(max(1, 10))
+            args = [(self.advModel, theta, self.data_poison.X.iloc[c], self.data_poison.Y.iloc[c]) for c in range(0, self.data_poison.getSize())]
+            
+            for i, cur_pois_res in enumerate(workerpool.map(self.line_search_tuple, args)):
+                dataUnionX.iloc[self.data_tr.getSize() + i] = cur_pois_res[0]
+                dataUnionY.iloc[self.data_tr.getSize() + i] = cur_pois_res[1]
                 model.fit(dataUnionX, dataUnionY)
                 self.advModel.setParams(model.getParams())
                 wCurr = self.advModel.objective(self.data_val.X, self.data_val.Y)
 
+            # for c in range(0, self.data_poison.getSize()):
+            #     xc = self.data_poison.X.iloc[c]
+            #     yc = self.data_poison.Y.iloc[c]
+            #     x, y = self.line_search( self.advModel, theta, xc, yc ) # Line Search
+            #     dataUnionX.iloc[self.data_tr.getSize() + c] = x
+            #     dataUnionY.iloc[self.data_tr.getSize() + c] = y
+            #     model.fit(dataUnionX, dataUnionY)
+            #     self.advModel.setParams(model.getParams())
+            #     wCurr = self.advModel.objective(self.data_val.X, self.data_val.Y)
+
             i += 1
             if (wCurr < wPrev):
                 self.eta *= 0.75
+                for c in range(0, self.data_poison.getSize()):
+                    dataUnionX.iloc[self.data_tr.getSize() + c] = self.data_poison.X.iloc[c]
+                    dataUnionY.iloc[self.data_tr.getSize() + c] = self.data_poison.Y.iloc[c]
             
+            if (wCurr > wBest):
+                wBest = wCurr
+                for c in range(0, self.data_poison.getSize()):
+                    self.data_poison.X.iloc[c] = dataUnionX.iloc[self.data_tr.getSize() + c]
+                    self.data_poison.Y.iloc[c] = dataUnionY.iloc[self.data_tr.getSize() + c]
+
             # print("Current loss:", model.mse(self.data_val.X, self.data_val.Y))
-            print("Current loss:", self.advModel.mse(self.data_val.X, self.data_val.Y))
+            print("Current loss:", self.advModel.mse(self.data_val.X, self.data_val.Y), wCurr)
+
 
     def set_advmodel(self, m):
         self.advmodel = m
@@ -218,6 +314,6 @@ class BGD(attack):
 
         self._generatePoisonPoints(baselinemodel, epsilon)
         mse = baselinemodel.objective(pd.concat([self.data_tr.X, self.data_poison.X]), pd.concat([self.data_tr.Y, self.data_poison.Y]))
-        print("final MSE:", mse)
+        print("final MSE Train:", mse)
 
         return self.data_poison, mse

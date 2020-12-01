@@ -3,3 +3,6 @@ __pycache__/*
 *.params
 poison*mses*
 *.jpg
+slurmRuns*
+slurm*
+results*

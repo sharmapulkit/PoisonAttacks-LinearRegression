@@ -164,10 +164,10 @@ class Model(ABC):
         self._b = params[-1]
 
     def fit(self, X, Y, max_iter=400):
-        if isinstance(X, pd.DataFrame):
-            X = X.values
-        if isinstance(Y, pd.DataFrame):
-            Y = Y.values
+        # if isinstance(X, pd.DataFrame):
+        #     X = X.values
+        # if isinstance(Y, pd.DataFrame):
+        #     Y = Y.values
 
         theta0 = np.append(self.w, self.b)
         opts = {'maxiter':max_iter, 'disp':False}
@@ -291,17 +291,17 @@ class ElasticNet(Model):
         return reg_loss
 
     def regularization_at(self, wb, X, Y):
-        reg_loss = self.weight_decay*np.sum(np.abs(wb[:-1])) + self.beta_2*np.sum(np.square(wb[:-1]))
+        reg_loss = self.beta_1*np.sum(np.abs(wb[:-1])) + self.beta_2*np.sum(np.square(wb[:-1]))
         return reg_loss
 
     def reg_gradient(self, X, Y):
-        grad_w = self.beta_1*np.where(self.w[:-1]>0, 1, -1) + 2*self.weight_decay*self.w
+        grad_w = self.beta_1*np.where(self.w[:-1]>0, 1, -1) + 2*self.beta_2*self.w
         grad_b = [0]
         reg_grad = np.concatenate((grad_w, grad_b), axis=None)
         return reg_grad
 
     def reg_gradient_at(self, wb, X, Y):
-        grad_w = self.weight_decay*np.where(wb[:-1]>0, 1, -1) + 2*self.weight_decay*wb[:-1]
+        grad_w = self.beta_1*np.where(wb[:-1]>0, 1, -1) + 2*self.beta_2*wb[:-1]
         grad_b = [0]
         reg_grad = np.concatenate((grad_w, grad_b), axis=None)
         return reg_grad

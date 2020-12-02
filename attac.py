@@ -91,20 +91,6 @@ class BGD(attack):
         obj_grad = np.append(obj_grad, dataset.Y.shape[0]*np.sum(res, axis=0))[:, None]
         # print("Residual shape:", np.bmat([[M, self.advModel.w[:, None]]]).T.shape)
 
-        # if (self.rvo is True):
-        #     w_grad_xc, b_grad_xc = theta_grad[:-1, :-1], theta_grad[:-1, -1]
-        #     w_grad_yc, b_grad_yc = theta_grad[-1, :-1], theta_grad[-1, -1]
-        # else:
-        #     w_grad_xc, b_grad_xc = theta_grad[:-1, :], theta_grad[-1, :]
-        #     w_grad_yc, b_grad_yc = np.zeros((1, xc.shape[0])), 0
-
-        # gradx = np.dot(dataset.X, w_grad_xc) + np.asarray(b_grad_xc)[:, 0]
-        # grady = np.dot(dataset.X, w_grad_yc.T) + b_grad_yc
-
-        # attackx = np.dot(res, gradx) / dataset.Y.shape[0]
-        # attacky = np.dot(res, grady) / dataset.Y.shape[0]
-        # grad = np.append(np.asarray(attackx)[0], attacky[0])     
-
         if (self.rvo is False):
             wb_grad_yc = np.zeros((len(mu) + 1, 1))
             theta_grad = np.append(theta_grad, wb_grad_yc, axis=1 )

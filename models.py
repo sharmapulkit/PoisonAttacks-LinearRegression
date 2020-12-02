@@ -60,7 +60,7 @@ class Model(ABC):
         """
         pass
 
-    def objective(self, X, Y, xc=None, yc=None):
+    def objective(self, X, Y):
         """
         returns the objective function for the model
         """
@@ -170,7 +170,7 @@ class Model(ABC):
             Y = Y.values
 
         theta0 = np.append(self.w, self.b)
-        opts = {'maxiter':max_iter, 'disp':True, 'gtol':1e-4}
+        opts = {'maxiter':max_iter, 'disp':False}
         res = scipy.optimize.minimize(fun=self.objective_at, x0=theta0, jac=self.gradient_at, args=(X, Y), method='BFGS', options=opts)
         theta_star = res.x
         self.w = theta_star[:-1]

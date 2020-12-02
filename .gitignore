@@ -1,1 +1,9 @@
 datasets*
+__pycache__/*
+*.params
+poison*mses*
+*.jpg
+slurmRuns*
+*slurm*
+results*
+poisoned*

@@ -1,0 +1,101 @@
++ allCommand=
++ '[' 4 -gt 0 ']'
++ allCommand='  python '
++ shift
++ '[' 3 -gt 0 ']'
++ allCommand='   python  -W '
++ shift
++ '[' 2 -gt 0 ']'
++ allCommand='    python  -W  ignore '
++ shift
++ '[' 1 -gt 0 ']'
++ allCommand='     python  -W  ignore  main.py '
++ shift
++ '[' 0 -gt 0 ']'
++ python -W ignore main.py
+SHAPES: (1021, 274) (0, 274)
+SHAPES: (1021, 1) (0, 1)
+Poisoning Iter: 0
+Current loss: 0.0020720844392519457
+Poisoning Iter: 1
+Current loss: 0.0020720844392519457
+Poisoning Iter: 2
+Current, Prev: 0.0022696677158165163 0.0022696677158165163
+final MSE: 0.001006867253958438
+Posion points X shape: (0, 274)
+Posion points Y shape: (0, 1)
+Final mse: 0.001006867253958438
+SHAPES: (1021, 274) (60, 274)
+SHAPES: (1021, 1) (60, 1)
+Poisoning Iter: 0
+Current loss: 0.008268917093431652
+Poisoning Iter: 1
+Current loss: 0.008811424559873965
+Poisoning Iter: 2
+Current, Prev: 0.009626156840306179 0.008805840600571086
+final MSE: 0.019462202610771823
+Posion points X shape: (60, 274)
+Posion points Y shape: (60, 1)
+Final mse: 0.019462202610771823
+SHAPES: (1021, 274) (126, 274)
+SHAPES: (1021, 1) (126, 1)
+Poisoning Iter: 0
+Current loss: 0.013114108624457634
+Poisoning Iter: 1
+Current loss: 0.014260417144309128
+Poisoning Iter: 2
+Current loss: 0.015224505752799268
+Poisoning Iter: 3
+Current loss: 0.015635315172797874
+Poisoning Iter: 4
+Current loss: 0.015487929121552387
+Poisoning Iter: 5
+Current, Prev: 0.019195824362290982 0.018926871035791562
+final MSE: 0.022332327993534212
+Posion points X shape: (126, 274)
+Posion points Y shape: (126, 1)
+Final mse: 0.022332327993534212
+SHAPES: (1021, 274) (199, 274)
+SHAPES: (1021, 1) (199, 1)
+Poisoning Iter: 0
+Current loss: 0.028030400621191977
+Poisoning Iter: 1
+Current loss: 0.02809419119607546
+Poisoning Iter: 2
+Current loss: 0.027356595478922646
+Poisoning Iter: 3
+Current, Prev: 0.032307380499970985 0.03161605063382459
+final MSE: 0.03795369685383146
+Posion points X shape: (199, 274)
+Posion points Y shape: (199, 1)
+Final mse: 0.03795369685383146
+SHAPES: (1021, 274) (278, 274)
+SHAPES: (1021, 1) (278, 1)
+Poisoning Iter: 0
+Current loss: 0.0334445825590232
+Poisoning Iter: 1
+Current loss: 0.034370905560553215
+Poisoning Iter: 2
+Current loss: 0.03348865804170953
+Poisoning Iter: 3
+Current, Prev: 0.03962082708030159 0.03869197980138721
+final MSE: 0.045294918581160394
+Posion points X shape: (278, 274)
+Posion points Y shape: (278, 1)
+Final mse: 0.045294918581160394
+SHAPES: (1021, 274) (365, 274)
+SHAPES: (1021, 1) (365, 1)
+Poisoning Iter: 0
+Current loss: 0.0398164177713554
+Poisoning Iter: 1
+Current loss: 0.039837027478257396
+Poisoning Iter: 2
+Current loss: 0.037648260112554156
+Poisoning Iter: 3
+Current, Prev: 0.04508926093025903 0.045250886983368585
+final MSE: 0.059576758724735814
+Posion points X shape: (365, 274)
+Posion points Y shape: (365, 1)
+Final mse: 0.059576758724735814
+{0: 0.001006867253958438, 0.04: 0.019462202610771823, 0.08: 0.022332327993534212, 0.12: 0.03795369685383146, 0.16: 0.045294918581160394, 0.2: 0.059576758724735814}
+Train Objective before poisoning: 0.0009400918691644719

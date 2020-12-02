@@ -35,44 +35,50 @@ def test_house_lasso():
 
 def main():
     ### Load Dataset
-    data = load_datasets.houseData()
-    # data = load_datasets.loanData()
+    # data = load_datasets.houseData(train_frac=0.22)
+    data = load_datasets.pharmpreprocData(train_frac=0.14)
+    # data = load_datasets.loanData(train_frac=0.006)
     data.load()
 
-    print("Attack on : Ridge; RVO")
+    model_name = "Lasso"
+    strategy = "RVO"
+    datasetName = "Health"
+    print("Attack on InvFlip: {}; {}".format(model_name, strategy))
     ### Train Model
-    baselinemodel = models.Ridge(data.whole.X.shape[1])
-    baselinemodel.fit(data.whole.X, data.whole.Y, max_iter=400)
-    mse_before_poisoning = baselinemodel.mse(data.train.X, data.train.Y)
 
     ### Create Attack
     # poisoning_rate = 0.08
     mses = {}
+    for poisoning_rate in [0.2]:
     # for poisoning_rate in [0, 0.04, 0.08, 0.12, 0.16, 0.20]:
-    for poisoning_rate in [0.20]:
+        baselinemodel = models.Ridge(data.train.X.shape[1])
+        baselinemodel.fit(data.train.X, data.train.Y, max_iter=400)
+        mse_before_poisoning = baselinemodel.mse(data.train.X, data.train.Y)
+
         alpha = poisoning_rate / (1 - poisoning_rate) # poisoning rate
-        Num_poisonPts = int(alpha * data.getSize())
+        Num_poisonPts = int(alpha * data.getTrain().getSize() )
         ini_poisonPts = load_datasets.initialDataSet()
         ini_poisonPts.loadInvFlip(data, Num_poisonPts)
+        # ini_poisonPts.loadBFlip(data, Num_poisonPts)
 
         advModel = models.Ridge(data.whole.X.shape[1])
-        bgd = BGD(data, ini_poisonPts, max_iters=50, eta=0.01, line_search_epsilon=1e-8, advModel=advModel, rvo=True)
+        bgd = BGD(data, ini_poisonPts, max_iters=50, eta=0.02, line_search_epsilon=1e-8, advModel=advModel, rvo=True)
         data_poison, mse_after_poisoning = bgd.generatePoisonPoints(baselinemodel)
-        mse_val_after_poisoing = bgd.advModel.objective(data.val.X, data.val.Y)
+        mse_val_after_poisoning = bgd.advModel.objective(data.val.X, data.val.Y)
 
         mses[poisoning_rate] = mse_val_after_poisoning
-        pk.dump(baselinemodel.getParams(), open("baselineModel_params_ridge_{}_bgd.params".format(poisoning_rate), "wb"))
+        # pk.dump(baselinemodel.getParams(), open("baselineModel_params_{}_{}_{}_{}.params".format(model_name, poisoning_rate, strategy, datasetName), "wb"))
         print("Posion points X shape:", data_poison.X.shape)
         print("Posion points Y shape:", data_poison.Y.shape)
         print("Final Val mse:", mse_val_after_poisoning)
         print("Final train mse:", bgd.advModel.objective(data.train.X, data.train.Y))
+        poisoned_data = np.concatenate((np.concatenate((data.train.Y, data_poison.Y)), np.concatenate((data.train.X, data_poison.X))), axis=1)
+        # pk.dump(poisoned_data, open("poisoned_dataset/poisoned_data_{}_{}_{}_p{}".format(model_name, strategy, datasetName, poisoning_rate), 'wb'))
+        # print("Saved poisoned dataset", poisoned_data.shape)
 
-    print(mses)
-    pk.dump(mses, open("poisoned_ridge_mses_rvo", 'wb'))
+    print("MSE:", mses)    
+    pk.dump(mses, open("poisoned_{}_mses_{}_data_{}_p0.12".format(model_name, strategy, datasetName), 'wb'))
     print("Train Objective before poisoning:", mse_before_poisoning)
-
-    ### Train with TRIM
-    ### Evaluate
 
 
 if __name__ == "__main__":

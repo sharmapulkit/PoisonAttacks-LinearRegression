@@ -171,7 +171,7 @@ class Model(ABC):
 
         theta0 = np.append(self.w, self.b)
         opts = {'maxiter':max_iter, 'disp':False}
-        res = scipy.optimize.minimize(fun=self.objective_at, x0=theta0, jac=self.gradient_at, args=(X, Y), method='BFGS', options=opts)
+        res = scipy.optimize.minimize(fun=self.objective_at, x0=theta0, jac=self.gradient_at, args=(X, Y), method='L-BFGS-B', options=opts)
         theta_star = res.x
         self.w = theta_star[:-1]
         self.b = theta_star[-1]
@@ -250,7 +250,7 @@ class Lasso(Model):
     """
     Regression with L-1 regularization
     """
-    def __init__(self, d, weight_decay=1e-3):
+    def __init__(self, d, weight_decay=1e-2):
         super().__init__(d)
         self.weight_decay = weight_decay
 

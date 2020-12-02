@@ -30,8 +30,8 @@ class datasets():
         self.df = pd.read_csv(self.dataPath)
         feature_columns = self.df.columns.drop(self.target_columns)
 
-        X = self.df[feature_columns]
-        Y = self.df[self.target_columns]
+        X = self.df[feature_columns].values
+        Y = self.df[self.target_columns].values
         self.whole = dataset_struct(X, Y)
 
         N = len(X)
@@ -41,8 +41,8 @@ class datasets():
         train_idxs = all_idxs[:int(self.train_frac*N)]
         val_idxs = all_idxs[int(self.train_frac*N):]
 
-        self.train = dataset_struct(X.iloc[train_idxs], Y.iloc[train_idxs])
-        self.val = dataset_struct(X.iloc[val_idxs], Y.iloc[val_idxs])
+        self.train = dataset_struct(X[train_idxs], Y[train_idxs])
+        self.val = dataset_struct(X[val_idxs], Y[val_idxs])
 
     def get_df(self):
         return self.df
@@ -93,8 +93,8 @@ class initialDataSet(datasets):
         arr = range(0, trainDataSize)
         selectedIdxs = np.random.choice(arr, size=N, replace=False)
 
-        self.X = data_tr.whole.X.iloc[selectedIdxs]
-        self.Y = 1 - data_tr.whole.Y.iloc[selectedIdxs]
+        self.X = data_tr.whole.X[selectedIdxs]
+        self.Y = 1 - data_tr.whole.Y[selectedIdxs]
 
         self.whole = dataset_struct(self.X, self.Y)
 
@@ -110,7 +110,9 @@ class initialDataSet(datasets):
         selectedIdxs = np.random.choice(arr, size=N, replace=False)
 
         self.X = data_tr.whole.X[selectedIdxs]
-        self.Y = round(1 - data_tr.whole.Y[selectedIdxs])
+        self.Y = np.round(1 - data_tr.whole.Y[selectedIdxs])
+
+        self.whole = dataset_struct(self.X, self.Y)
 
 
     def loadRandom(self, N, mean, variance):

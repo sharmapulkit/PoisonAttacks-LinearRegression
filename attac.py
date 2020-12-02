@@ -29,6 +29,7 @@ class BGD(attack):
 
         self._mean = None
         self._covariance = None
+        self.eq7lhs = None
 
     def computeM(self, xc, yc):
         """
@@ -39,7 +40,7 @@ class BGD(attack):
         pred = self.advModel.predict(xc)
         residual = pred - yc
         prod = xc[:, None] @ weights[:, None].T
-        return prod + residual.values
+        return prod + residual
 
     def covariance(self, data):
         """ Return covariance matrix """
@@ -65,35 +66,50 @@ class BGD(attack):
         if (valData is True):
             dataset = self.data_val
 
+        if self.eq7lhs is None:
+            self.eq7lhs = np.bmat([[sigma + self.lambdaG*self.advModel.getG(), mu[:, None]], [mu[:, None].T, np.array([[1]])]] )
+
+        # dim = len(xc)
+        # np.random.seed(0)
+        # xc, yc, eq7lhs, mu, M = \
+        #     np.random.random((dim)), np.random.random((1, 1)), np.random.random((dim + 1, dim + 1)), np.random.random((dim, 1)), np.random.random((dim, dim))
+
         if (self.rvo is True):
-            eq7lhs = np.bmat([[sigma + self.lambdaG*self.advModel.getG(), mu[:, None]], [mu[:, None].T, np.array([[1]])]] )
-            eq7rhs = -(1/len(dataset.X))*np.bmat([[M, self.advModel.w[:, None]], [-xc[:, None].T, -np.array([[1]]) ] ]).T
+            # eq7rhs = -(1/len(dataset.X))*np.bmat([[M, self.advModel.w[:, None]], [-xc[:, None].T, -np.array([[1]]) ] ]).T
+            eq7rhs = -(1/len(dataset.X))*np.bmat([[M, -xc[:, None]], [self.advModel.w[:, None].T, -np.array([[1]]) ] ]).T
         else:
-            eq7lhs = np.bmat([[sigma + self.lambdaG*self.advModel.getG(), mu[:, None]], [mu[:, None].T, np.array([[1]])]] )
             eq7rhs = -(1/len(dataset.X))*np.bmat([[M, self.advModel.w[:, None]]]).T
 
         # print("lhs:", eq7lhs.shape)
         # print("rhs:", eq7rhs.shape)
-        theta_grad, _, _, _ = np.linalg.lstsq(eq7lhs, eq7rhs, rcond=None)
+        theta_grad, _, _, _ = np.linalg.lstsq(self.eq7lhs, eq7rhs, rcond=None)
+        # print("Attack:", theta_grad)
 
         ### Compute w_grad
-        res = (self.advModel.predict(dataset.X) - dataset.Y.iloc[:, 0]).values
-        obj_grad = np.sum(res * dataset.X.values.T, axis=1)
+        res = (self.advModel.predict(dataset.X) - dataset.Y[:, 0])
+        obj_grad = np.sum(res * dataset.X.T, axis=1)
         obj_grad = np.append(obj_grad, dataset.Y.shape[0]*np.sum(res, axis=0))[:, None]
         # print("Residual shape:", np.bmat([[M, self.advModel.w[:, None]]]).T.shape)
 
-        # if (rvo is True):
+        # if (self.rvo is True):
         #     w_grad_xc, b_grad_xc = theta_grad[:-1, :-1], theta_grad[:-1, -1]
         #     w_grad_yc, b_grad_yc = theta_grad[-1, :-1], theta_grad[-1, -1]
         # else:
         #     w_grad_xc, b_grad_xc = theta_grad[:-1, :], theta_grad[-1, :]
-        #     w_grad_yc, b_grad_yc = np.zeros(()), 0
+        #     w_grad_yc, b_grad_yc = np.zeros((1, xc.shape[0])), 0
+
+        # gradx = np.dot(dataset.X, w_grad_xc) + np.asarray(b_grad_xc)[:, 0]
+        # grady = np.dot(dataset.X, w_grad_yc.T) + b_grad_yc
+
+        # attackx = np.dot(res, gradx) / dataset.Y.shape[0]
+        # attacky = np.dot(res, grady) / dataset.Y.shape[0]
+        # grad = np.append(np.asarray(attackx)[0], attacky[0])     
 
         if (self.rvo is False):
             wb_grad_yc = np.zeros((len(mu) + 1, 1))
             theta_grad = np.append(theta_grad, wb_grad_yc, axis=1 )
 
-        # grad_xc = np.concatenate((obj_grad[:-1, None].T @ w_grad_xc, ))
+        ### grad_xc = np.concatenate((obj_grad[:-1, None].T @ w_grad_xc, ))
         grad = theta_grad.T @ obj_grad / dataset.Y.shape[0]
         return grad
 
@@ -109,7 +125,8 @@ class BGD(attack):
         if (valData is True):
             dataset = self.data_val
 
-        model.setParams(params)
+        new_model = models.Ridge(xc.shape[0])
+        new_model.setParams(params)
         objective_prev = -float('inf')
 
         iters = 0
@@ -118,8 +135,8 @@ class BGD(attack):
         eta = self.eta
         beta = 0.08
         taintedTr = load_datasets.dataset_struct(np.append(np.copy(self.data_tr.X), xc_new[:, None].T, axis=0), np.append(np.copy(self.data_tr.Y), yc_new[:, None].T, axis=0) )
-        model.fit(taintedTr.X, taintedTr.Y)
-        objective_prev = model.mse(taintedTr.X, taintedTr.Y)
+        new_model.fit(taintedTr.X, taintedTr.Y)
+        objective_prev = new_model.mse(taintedTr.X, taintedTr.Y)
 
         grad = self.computeGrad_x(xc, yc)
         grad_xc = np.squeeze(np.array(grad[:-1]))
@@ -130,18 +147,16 @@ class BGD(attack):
             ## update xc
             xc_new = xc_new + grad_xc * eta
             xc_new = np.clip(xc_new, 0, 1)
-            yc_new = yc_new
+            
             if (self.rvo is True):
                 yc_new += grad_yc * eta
                 yc_new = np.minimum(np.ones(yc_new.shape), np.maximum(np.zeros_like(yc_new), yc_new))
 
             taintedTr.X[-1] = xc_new
             taintedTr.Y[-1] = yc_new
-            model.fit(taintedTr.X, taintedTr.Y, max_iter=50)
+            new_model.fit(taintedTr.X, taintedTr.Y, max_iter=400)
 
-            objective_curr = model.mse(taintedTr.X, taintedTr.Y)
-            # objective_curr = model.objective(self.data_tr.X, self.data_tr.Y)
-            # print("Line search objective:", objective_curr)
+            objective_curr = new_model.mse(taintedTr.X, taintedTr.Y)
             ## break if no progress or convergence
             if (np.abs(objective_curr - objective_prev) < self.line_search_epsilon or (iters > 8)):
                 # print("objective_curr")
@@ -151,20 +166,14 @@ class BGD(attack):
                 xc_new = xc_new - grad_xc * eta
                 if (self.rvo is True):
                     yc_new = yc_new - grad_yc * eta
-                # print("diff", objective_curr, objective_prev, iters)
-                # if (iters > 2):
                 break
                 
             if (iters > 0):
                 eta = eta*beta
             
             objective_prev = objective_curr
-            # if (iters > 0):#(objective_curr < objective_prev):
-            #     eta = eta*beta
-
-            # print("Number of iters:", iters)
             iters += 1
-
+        
         return xc_new, yc_new
 
     def _generatePoisonPoints(self, model, epsilon):
@@ -178,19 +187,20 @@ class BGD(attack):
         epsilon: positive constant for terminating condition
         """
         i = 0
-        dataUnionX = pd.concat([self.data_tr.X, self.data_poison.X])
-        dataUnionY = pd.concat([self.data_tr.Y, self.data_poison.Y])
+        dataUnionX = np.concatenate((self.data_tr.X, self.data_poison.X))
+        dataUnionY = np.concatenate((self.data_tr.Y, self.data_poison.Y))
         print("SHAPES:", self.data_tr.X.shape, self.data_poison.X.shape)
         print("SHAPES:", self.data_tr.Y.shape, self.data_poison.Y.shape)
         model.fit(dataUnionX, dataUnionY)
         self.advModel.setParams(model.getParams())
+        bestParams = model.getParams()
         wPrev = self.advModel.mse(self.data_val.X, self.data_val.Y)
         wCurr = 0
 
         wBest = wPrev
         while (i < self._max_iters):
             print("Poisoning Iter:", i)
-            if (i != 0 and np.abs(wCurr - wPrev) < epsilon):
+            if (i >= 18 and np.abs(wCurr - wPrev) < epsilon): ## Minimum number of iterations
                 print("Current, Prev:", wCurr, wPrev)
                 break
 
@@ -198,11 +208,11 @@ class BGD(attack):
             wCurr = self.advModel.mse(self.data_val.X, self.data_val.Y)
             theta = model.getParams()
             for c in range(0, self.data_poison.getSize()):
-                xc = self.data_poison.X.iloc[c]
-                yc = self.data_poison.Y.iloc[c]
+                xc = self.data_poison.X[c]
+                yc = self.data_poison.Y[c]
                 x, y = self.line_search( self.advModel, theta, xc, yc ) # Line Search
-                dataUnionX.iloc[self.data_tr.getSize() + c] = x
-                dataUnionY.iloc[self.data_tr.getSize() + c] = y
+                dataUnionX[self.data_tr.getSize() + c] = x
+                dataUnionY[self.data_tr.getSize() + c] = y
                 # time_after_assigning = time.time()
                 # print("Time to assign:", time_after_assigning - time_after_line_search)
                 model.fit(dataUnionX, dataUnionY)
@@ -212,19 +222,20 @@ class BGD(attack):
                 wCurr = self.advModel.mse(self.data_val.X, self.data_val.Y)
 
             i += 1
-            if (wCurr < wPrev):
+            if (wCurr <= wPrev):
                 self.eta *= 0.75
+                self.advModel.setParams(bestParams)                
                 for c in range(0, self.data_poison.getSize()):
-                    dataUnionX.iloc[self.data_tr.getSize() + c] = self.data_poison.X.iloc[c]
-                    dataUnionY.iloc[self.data_tr.getSize() + c] = self.data_poison.Y.iloc[c]
+                    dataUnionX[self.data_tr.getSize() + c] = self.data_poison.X[c]
+                    dataUnionY[self.data_tr.getSize() + c] = self.data_poison.Y[c]
             
             if (wCurr > wBest):
                 wBest = wCurr
+                bestParams = model.getParams()
                 for c in range(0, self.data_poison.getSize()):
-                    self.data_poison.X.iloc[c] = dataUnionX.iloc[self.data_tr.getSize() + c]
-                    self.data_poison.Y.iloc[c] = dataUnionY.iloc[self.data_tr.getSize() + c]
+                    self.data_poison.X[c] = dataUnionX[self.data_tr.getSize() + c]
+                    self.data_poison.Y[c] = dataUnionY[self.data_tr.getSize() + c]
             
-            # print("Current loss:", model.mse(self.data_val.X, self.data_val.Y))
             print("Current loss:", self.advModel.mse(self.data_val.X, self.data_val.Y))
 
 
@@ -248,6 +259,7 @@ class BGD(attack):
         print("SHAPES:", self.data_tr.Y.shape, self.data_poison.Y.shape)
         model.fit(dataUnionX, dataUnionY)
         self.advModel.setParams(model.getParams())
+        bestParams = model.getParams()
         wPrev = self.advModel.objective(self.data_val.X, self.data_val.Y)
         wCurr = 0
 
@@ -264,11 +276,11 @@ class BGD(attack):
 
             #### Pool
             workerpool = Pool(max(1, 10))
-            args = [(self.advModel, theta, self.data_poison.X.iloc[c], self.data_poison.Y.iloc[c]) for c in range(0, self.data_poison.getSize())]
+            args = [(self.advModel, theta, self.data_poison.X[c], self.data_poison.Y[c]) for c in range(0, self.data_poison.getSize())]
             
             for i, cur_pois_res in enumerate(workerpool.map(self.line_search_tuple, args)):
-                dataUnionX.iloc[self.data_tr.getSize() + i] = cur_pois_res[0]
-                dataUnionY.iloc[self.data_tr.getSize() + i] = cur_pois_res[1]
+                dataUnionX[self.data_tr.getSize() + i] = cur_pois_res[0]
+                dataUnionY[self.data_tr.getSize() + i] = cur_pois_res[1]
                 model.fit(dataUnionX, dataUnionY)
                 self.advModel.setParams(model.getParams())
                 wCurr = self.advModel.objective(self.data_val.X, self.data_val.Y)
@@ -286,19 +298,21 @@ class BGD(attack):
             i += 1
             if (wCurr < wPrev):
                 self.eta *= 0.75
+                self.advModel.setParams(bestParams)                
                 for c in range(0, self.data_poison.getSize()):
-                    dataUnionX.iloc[self.data_tr.getSize() + c] = self.data_poison.X.iloc[c]
-                    dataUnionY.iloc[self.data_tr.getSize() + c] = self.data_poison.Y.iloc[c]
+                    dataUnionX[self.data_tr.getSize() + c] = self.data_poison.X[c]
+                    dataUnionY[self.data_tr.getSize() + c] = self.data_poison.Y[c]
             
             if (wCurr > wBest):
                 wBest = wCurr
+                bestParams = model.getParams()
                 for c in range(0, self.data_poison.getSize()):
-                    self.data_poison.X.iloc[c] = dataUnionX.iloc[self.data_tr.getSize() + c]
-                    self.data_poison.Y.iloc[c] = dataUnionY.iloc[self.data_tr.getSize() + c]
+                    self.data_poison.X[c] = dataUnionX[self.data_tr.getSize() + c]
+                    self.data_poison.Y[c] = dataUnionY[self.data_tr.getSize() + c]
+
 
             # print("Current loss:", model.mse(self.data_val.X, self.data_val.Y))
             print("Current loss:", self.advModel.mse(self.data_val.X, self.data_val.Y), wCurr)
-
 
     def set_advmodel(self, m):
         self.advmodel = m
@@ -313,7 +327,7 @@ class BGD(attack):
         # trainData.load()
 
         self._generatePoisonPoints(baselinemodel, epsilon)
-        mse = baselinemodel.objective(pd.concat([self.data_tr.X, self.data_poison.X]), pd.concat([self.data_tr.Y, self.data_poison.Y]))
+        mse = baselinemodel.objective(np.concatenate((self.data_tr.X, self.data_poison.X)), np.concatenate((self.data_tr.Y, self.data_poison.Y)))
         print("final MSE Train:", mse)
 
         return self.data_poison, mse

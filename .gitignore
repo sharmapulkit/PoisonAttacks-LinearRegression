@@ -4,5 +4,6 @@ __pycache__/*
 poison*mses*
 *.jpg
 slurmRuns*
-slurm*
+*slurm*
 results*
+poisoned*
